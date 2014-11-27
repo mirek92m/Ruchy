@@ -37,12 +37,13 @@ void takePreviousFragment(int &curFragment, int &begin, int &end, std::vector<mo
 void saveVideoToFile(cv::VideoWriter video, std::vector<movieFragment> fragmentList, int &curFragment, int &curFrame, int &begin, int &end, double fps, int width, int height, std::deque<std::vector<uchar>> allFrames, int data_storage);
 void setBeginFromFrameNo(int &begin, int frameNo, std::deque<int> motion);
 void setEndFromFrameNo(int &end, int frameNo, std::deque<int> motion);
-//void manualMode(std::deque<std::vector<uchar>> allFrames, std::deque<int> motion, cv::VideoCapture &movie, int width, int height, int data_storage, int counter);
+void manualMode(std::deque<std::vector<uchar>> allFrames, std::deque<int> motion, cv::VideoCapture &movie, int width, int height, int data_storage, int counter);
 void savePicture(cv::Mat frame, int data_storage, int &counter, std::string &pic_name, std::deque<std::vector<uchar>> &allFrames, std::vector<uchar> &buff, std::vector<int> param);
 void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_size, int &befo_motion, int &past_motion,
 				float &area, int &history, int &nmixtures, int &method, int &data_storage);
 void readParam(std::string path, int &data_storage);
-
+void readParam(std::string path, std::map<std::string,double> &parameters);
+void userMenu(std::map<std::string,double> &parameters);
 
 void motion_detection(std::string path, std::map<std::string,double> parameters, std::deque<std::vector<uchar>> &allFrames, std::deque<int> &motion, cv::VideoCapture &movie, int &width, int &height, int &counter){
         //odczyt parametrów
@@ -58,10 +59,6 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
     int method = parameters["method"];
 	int data_storage = parameters["data_storage"];
  
-
-	std::string path2 = "C://Users//Mirek//Desktop//Test//param.txt";
-	readParam(path2, frame_skip, zeros_size, ones_size, befo_motion, past_motion, requested_area, history, nmixtures, method, data_storage);
-
     cv::Mat frame;
 	cv::Mat fore;
     cv::Mat element = cv::getStructuringElement(0, cv::Size(5,5));
@@ -82,10 +79,7 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 		mkdir("images");
 		chdir("images");
 	}
-	else
-	{
 
-	}
        
     // ustawienie dodatkowych parametrów metody
     bg.set("detectShadows", true); // rozróżnianie obiektów i cieni
@@ -275,6 +269,7 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
     }
 
 	//Koniec metod
+	manualMode(allFrames, motion, movie, width, height, data_storage, counter);
 
 	for(int i=0; i<offset; i++)
 	{
@@ -297,7 +292,7 @@ int main(int argc, char *argv[])
     parametry["history"] = 100;
     parametry["nmixtures"] = 3;
     parametry["method"] = 1;
-	parametry["data_storage"] = 0;
+	parametry["data_storage"] = 1;
 
 	std::deque<std::vector<uchar>> allFrames;
 	std::deque<int> motion;
@@ -305,8 +300,10 @@ int main(int argc, char *argv[])
 	int width;
 	int height;
 	int data_storage;
-	std::string path2 = "C://Users//Mirek//Desktop//Test//param.txt";
-	readParam(path2, data_storage);
+
+	userMenu(parametry);
+	//std::string path2 = "param.txt";
+	//readParam(path2, parametry);
 	int counter = 0;
  
     std::string path = "C://Users//Mirek//Desktop//Test//ryba.mp4";
@@ -315,244 +312,7 @@ int main(int argc, char *argv[])
 
 	motion_detection(path,parametry, allFrames, motion, movie, width, height, counter);
 
-	// TRYB MANUALNY
-
-	cv::namedWindow("Motion");
-	//manualMode(allFrames, motion, movie, width, height, data_storage, counter);
-
-	std::vector<movieFragment> fragmentList; 
-	int movies_count = 0;
-	int break_flag = 0;
-	unsigned int index = 0;
-    std::string video_name;
-    cv::VideoWriter video;
-	int frameNo;
-
-	// Dodawanie do listy informacji na temat wszystkich fragmentów z ruchem (początek, koniec, nazwa filmu)
-
-	while( true )
-	{
-		movieFragment movieData;
-		++movies_count;
-		while( motion[index] == 0 )
-		{
-			++index;
-			if( index == motion.size() )
-			{
-				break_flag = 1;
-				break;
-			}
-		}
-        if( break_flag )
-		{
-			break;
-		}
-		
-		movieData.begin = index;
-		video_name = std::string("video_") + std::to_string((long double)movies_count) + std::string(".avi");
-		movieData.name = video_name;
- 
-		while( motion[index] == 1 )
-		{
-			++index;
-			if( index == motion.size() )
-			{
-				break_flag = 1;
-				break;
-			}
-		}
-		movieData.end = index - 1;
-		if( break_flag)
-		{
-			break;
-		}
-		fragmentList.push_back(movieData);
-		 
-	}
-
-
-
-	double fps = movie.get(CV_CAP_PROP_FPS);
-	int maxFrame;
-	if (allFrames.size()>counter)
-		maxFrame = allFrames.size();
-	else
-		maxFrame = counter;
-
-	if((movie.get(CV_CAP_PROP_FRAME_COUNT)/maxFrame) > 1.2 )
-	{
-		fps = fps/2;
-	}
-
-	//char k;
-	int k;
-	int mSec = (int)(1000/fps);
-	int curFragment = 0;
-	int curFrame = fragmentList[0].begin;
-	int begin = fragmentList[0].begin;
-	int end = fragmentList[0].end;
-	bool stop = false;
-	bool esc = false;
-
-	// Menu w postaci "getchara" -> docelowo będa to buttony, suwaczek, i text fieldy w GUI
-	std::string menuMessage;
-	menuMessage = "p - Odtwarzaj \n"
-				  "Strzalka w dol - 5 ramek do tylu \n"
-				  "Strzalka w gore - 1 ramka do tylu \n"
-				  "Strzalka w prawo - 1 ramka do przodu \n"
-				  "Strzalka w lewo - 5 ramek do przodu \n"
-				  "x - ustaw relatywny moment filmu, 0 - poczatek, 1 koniec \n"
-				  "w - zapisz jako poczatek fragmentu \n"
-				  "e - zapisz jako koniec fragmentu \n"
-				  "y - wez poprzedni fragment \n"
-				  "u - wez nastepny fragment \n"
-				  "i - zapisz film \n"
-				  "r - przesun na poczatek fragmentu \n"
-				  "t - przesun na koniec fragmenu \n"
-				  "a - ustaw ramke jako poczatek fragmentu \n"
-				  "z - ustaw ramke jako poczatek fragmentu \n"
-				  "ESC - wyjscie \n\n";
-					
-
-	double momentFilmu;
-	
-	while (true)
-	{
-		system("CLS");
-		std::cout << menuMessage;
-		std::cout << "Aktualny fragment: " << curFragment << std::endl;
-		std::cout << "Aktualna ramka: " << curFrame << std::endl; // wyświetlanie aktualnej ramki po każdej akcji - dobre do sprawdzenia poprawności :)
-		
-
-		k = cv::waitKey(10000);
-		//std::cout << (int)k;
-		//k = cv::waitKey(1000);
-		if (k=='p') // odtwarzanie - button "odtwarzaj"
-		{
-			playVideo(motion, allFrames, stop, esc, curFrame, momentFilmu, k, mSec, data_storage);
-		}
-		
-		else if (k=='w') // ustaw aktualną ramkę jako początek fragmentu, button "Ustaw początek"
-		{
-			setBegining(begin, curFrame);
-		}
-
-
-		else if (k=='e') // ustaw aktualną ramkę jako koniec fragmentu, button "Ustaw koniec"
-		{
-			setEnd(end, curFrame);
-		}
-
-
-		else if (k=='r') // przesuń na początek fragmentu, button "Przesuń na początek"
-		{
-			moveToBegining(curFrame, begin, allFrames, data_storage);
-		}
-
-
-		else if (k=='t') // przesuń na koniec fragmentu, button "Przesuń na koniec"
-		{
-			moveToEnd(curFrame, end, allFrames, data_storage);
-		}
-
-
-		else if (k=='y') // weź poprzedni fragment, button "Weź poprzedni fragment"
-		{
-			takePreviousFragment(curFragment, begin, end, fragmentList, curFrame);
-		}
-
-
-		else if (k=='u') // weź następny fragment, button "Weź następny fragment"
-		{
-			takeNextFragment(curFragment, begin, end, fragmentList, curFrame);
-		}
-
-
-		else if (k=='x') // Wybór momentu filmu - docelowo suwaczek - teraz double [0;1]
-		{
-			setMovieTime(motion, allFrames, momentFilmu, curFrame, data_storage);
-		}
-
-		else if (k=='i') // zapis fragmentu filmu do pliku, button "Zapisz"
-		{
-			saveVideoToFile(video, fragmentList, curFragment, curFrame, begin, end, fps, width, height, allFrames, data_storage);
-		}
-
-		else if (k=='a') // ustawienie liczby z textfielda jako początek fragmentu, button "Ustaw", przed textfieldem najlepiej jakaś labelka "Początek"
-		{
-			std::cout << "Podaj poczatek fragmentu: " << std::endl;
-			std::cin >> frameNo;
-			setBeginFromFrameNo(begin, frameNo, motion);
-		}
-
-		else if (k=='z') // ustawienie liczby z textfielda jako koniec fragmentu, button "Ustaw", przed textfieldem najlepiej jakaś labelka "Koniec"
-		{
-			std::cout << "Podaj koniec fragmentu: " << std::endl;
-			std::cin >> frameNo;
-			setEndFromFrameNo(end, frameNo, motion);
-		}
-
-		else if (k==27) //ESC - wyjście, button "Zakończ"
-		{
-			exitFromManualMode(esc);
-		}
-
-		else if (k==2490368) // up
-		{
-			moveFiveFramesLater(curFrame, allFrames, motion, data_storage);
-		}
-		
-		else if (k==2621440) // down
-		{
-			moveFiveFramesEarlier(curFrame, allFrames, data_storage);
-		}
-
-		else if (k==2424832) // left
-		{
-			moveOneFrameEarlier(curFrame, allFrames, data_storage);
-		}
-
-		else if (k==2555904) // right
-		{
-			moveOneFrameLater(curFrame, allFrames, motion, data_storage);
-		}
-
-		if (esc == true)
-			break;
-	
-	}
-
-	std::cout << std::endl;
-	for (int i=0; i<fragmentList.size(); i++)
-		std::cout << fragmentList[i].begin << " " << fragmentList[i].end << " " << fragmentList[i].name << std::endl; // wypisywanie info nt. fragmentów
-
-
-
-	cv::destroyWindow("Motion");
-
-
-
-
-	// KONIEC TRYBU MANUALNEGO
-
-	std::string pic_name;
-	int count = 0;
-	
-	if (parametry["data_storage"]==1)
-	{
-		while (true) // usuwanie tymczasowych danych
-		{
-			pic_name = std::string("img") + std::to_string((long double)count) + std::string(".jpg");
-			const char * c = pic_name.c_str();
-			if (remove(c) != 0 )
-				break;
-			count++;
-		}
-		chdir("..");
-		rmdir("images");
-	}
-
-    system("pause");
+	system("pause");
     return 0;
 }
 
@@ -836,10 +596,244 @@ void setEndFromFrameNo(int &end, int frameNo, std::deque<int> motion)
 		end = motion.size()-1;
 }
 
-/*void manualMode(std::deque<std::vector<uchar>> allFrames, std::deque<int> motion, cv::VideoCapture &movie, int width, int height, int data_storage, int counter)
+void manualMode(std::deque<std::vector<uchar>> allFrames, std::deque<int> motion, cv::VideoCapture &movie, int width, int height, int data_storage, int counter)
 {
+	cv::namedWindow("Motion");
+	std::vector<movieFragment> fragmentList; 
+	int movies_count = 0;
+	int break_flag = 0;
+	unsigned int index = 0;
+    std::string video_name;
+    cv::VideoWriter video;
+	int frameNo;
+
+	// Dodawanie do listy informacji na temat wszystkich fragmentów z ruchem (początek, koniec, nazwa filmu)
+
+	while( true )
+	{
+		movieFragment movieData;
+		++movies_count;
+		while( motion[index] == 0 )
+		{
+			++index;
+			if( index == motion.size() )
+			{
+				break_flag = 1;
+				break;
+			}
+		}
+        if( break_flag )
+		{
+			break;
+		}
+		
+		movieData.begin = index;
+		video_name = std::string("video_") + std::to_string((long double)movies_count) + std::string(".avi");
+		movieData.name = video_name;
+ 
+		while( motion[index] == 1 )
+		{
+			++index;
+			if( index == motion.size() )
+			{
+				break_flag = 1;
+				break;
+			}
+		}
+		movieData.end = index - 1;
+		if( break_flag)
+		{
+			break;
+		}
+		fragmentList.push_back(movieData);
+		 
+	}
+
+
+
+	double fps = movie.get(CV_CAP_PROP_FPS);
+	int maxFrame;
+	if (allFrames.size()>counter)
+		maxFrame = allFrames.size();
+	else
+		maxFrame = counter;
+
+	if((movie.get(CV_CAP_PROP_FRAME_COUNT)/maxFrame) > 1.2 )
+	{
+		fps = fps/2;
+	}
+
+	//char k;
+	int k;
+	int mSec = (int)(1000/fps);
+	int curFragment = 0;
+	int curFrame = fragmentList[0].begin;
+	int begin = fragmentList[0].begin;
+	int end = fragmentList[0].end;
+	bool stop = false;
+	bool esc = false;
+
+	// Menu w postaci "getchara" -> docelowo będa to buttony, suwaczek, i text fieldy w GUI
+	std::string menuMessage;
+	menuMessage = "p - Odtwarzaj \n"
+				  "Strzalka w dol - 5 ramek do tylu \n"
+				  "Strzalka w gore - 1 ramka do tylu \n"
+				  "Strzalka w prawo - 1 ramka do przodu \n"
+				  "Strzalka w lewo - 5 ramek do przodu \n"
+				  "x - ustaw relatywny moment filmu, 0 - poczatek, 1 koniec \n"
+				  "w - zapisz jako poczatek fragmentu \n"
+				  "e - zapisz jako koniec fragmentu \n"
+				  "y - wez poprzedni fragment \n"
+				  "u - wez nastepny fragment \n"
+				  "i - zapisz film \n"
+				  "r - przesun na poczatek fragmentu \n"
+				  "t - przesun na koniec fragmenu \n"
+				  "a - ustaw ramke jako poczatek fragmentu \n"
+				  "z - ustaw ramke jako poczatek fragmentu \n"
+				  "ESC - wyjscie \n\n";
+					
+
+	double momentFilmu;
 	
-}*/
+	while (true)
+	{
+		system("CLS");
+		std::cout << menuMessage;
+		std::cout << "Aktualny fragment: " << curFragment << std::endl;
+		std::cout << "Aktualna ramka: " << curFrame << std::endl; // wyświetlanie aktualnej ramki po każdej akcji - dobre do sprawdzenia poprawności :)
+		
+
+		k = cv::waitKey(10000);
+		//std::cout << (int)k;
+		//k = cv::waitKey(1000);
+		if (k=='p') // odtwarzanie - button "odtwarzaj"
+		{
+			playVideo(motion, allFrames, stop, esc, curFrame, momentFilmu, k, mSec, data_storage);
+		}
+		
+		else if (k=='w') // ustaw aktualną ramkę jako początek fragmentu, button "Ustaw początek"
+		{
+			setBegining(begin, curFrame);
+		}
+
+
+		else if (k=='e') // ustaw aktualną ramkę jako koniec fragmentu, button "Ustaw koniec"
+		{
+			setEnd(end, curFrame);
+		}
+
+
+		else if (k=='r') // przesuń na początek fragmentu, button "Przesuń na początek"
+		{
+			moveToBegining(curFrame, begin, allFrames, data_storage);
+		}
+
+
+		else if (k=='t') // przesuń na koniec fragmentu, button "Przesuń na koniec"
+		{
+			moveToEnd(curFrame, end, allFrames, data_storage);
+		}
+
+
+		else if (k=='y') // weź poprzedni fragment, button "Weź poprzedni fragment"
+		{
+			takePreviousFragment(curFragment, begin, end, fragmentList, curFrame);
+		}
+
+
+		else if (k=='u') // weź następny fragment, button "Weź następny fragment"
+		{
+			takeNextFragment(curFragment, begin, end, fragmentList, curFrame);
+		}
+
+
+		else if (k=='x') // Wybór momentu filmu - docelowo suwaczek - teraz double [0;1]
+		{
+			setMovieTime(motion, allFrames, momentFilmu, curFrame, data_storage);
+		}
+
+		else if (k=='i') // zapis fragmentu filmu do pliku, button "Zapisz"
+		{
+			saveVideoToFile(video, fragmentList, curFragment, curFrame, begin, end, fps, width, height, allFrames, data_storage);
+		}
+
+		else if (k=='a') // ustawienie liczby z textfielda jako początek fragmentu, button "Ustaw", przed textfieldem najlepiej jakaś labelka "Początek"
+		{
+			std::cout << "Podaj poczatek fragmentu: " << std::endl;
+			std::cin >> frameNo;
+			setBeginFromFrameNo(begin, frameNo, motion);
+		}
+
+		else if (k=='z') // ustawienie liczby z textfielda jako koniec fragmentu, button "Ustaw", przed textfieldem najlepiej jakaś labelka "Koniec"
+		{
+			std::cout << "Podaj koniec fragmentu: " << std::endl;
+			std::cin >> frameNo;
+			setEndFromFrameNo(end, frameNo, motion);
+		}
+
+		else if (k==27) //ESC - wyjście, button "Zakończ"
+		{
+			exitFromManualMode(esc);
+		}
+
+		else if (k==2490368) // up
+		{
+			moveFiveFramesLater(curFrame, allFrames, motion, data_storage);
+		}
+		
+		else if (k==2621440) // down
+		{
+			moveFiveFramesEarlier(curFrame, allFrames, data_storage);
+		}
+
+		else if (k==2424832) // left
+		{
+			moveOneFrameEarlier(curFrame, allFrames, data_storage);
+		}
+
+		else if (k==2555904) // right
+		{
+			moveOneFrameLater(curFrame, allFrames, motion, data_storage);
+		}
+
+		if (esc == true)
+			break;
+	
+	}
+
+	std::cout << std::endl;
+	for (int i=0; i<fragmentList.size(); i++)
+		std::cout << fragmentList[i].begin << " " << fragmentList[i].end << " " << fragmentList[i].name << std::endl; // wypisywanie info nt. fragmentów
+
+
+
+	cv::destroyWindow("Motion");
+
+
+
+
+	// KONIEC TRYBU MANUALNEGO
+
+	std::string pic_name;
+	int count = 0;
+	
+	if (data_storage==1)
+	{
+		while (true) // usuwanie tymczasowych danych
+		{
+			pic_name = std::string("img") + std::to_string((long double)count) + std::string(".jpg");
+			const char * c = pic_name.c_str();
+			if (remove(c) != 0 )
+				break;
+			count++;
+		}
+		chdir("..");
+		rmdir("images");
+	}
+
+    //system("pause");
+    //return 0;
+}
 
 void savePicture(cv::Mat frame, int data_storage, int &counter, std::string &pic_name, std::deque<std::vector<uchar>> &allFrames, std::vector<uchar> &buff, std::vector<int> param)
 {
@@ -921,6 +915,70 @@ void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_siz
 	}
 }
 
+void readParam(std::string path, std::map<std::string,double> &parameters)
+{
+	std::fstream plik;
+	plik.open( path, std::ios::in );
+	if (!plik.good() == true)
+	{
+		return;
+	}
+	std::string dane;
+	while (getline(plik,dane))
+	{
+		if (dane=="frame_skip")
+		{
+			getline(plik,dane);
+			parameters["frame_skip"] = stoi(dane);
+		}
+		else if (dane=="zeros_size")
+		{
+			getline(plik,dane);
+			parameters["zeros_size"] = stoi(dane);
+		}
+		else if (dane=="ones_size")
+		{
+			getline(plik,dane);
+			parameters["ones_size"] = stoi(dane);
+		}
+		else if (dane=="befo_motion")
+		{
+			getline(plik,dane);
+			parameters["befo_motion"] = stoi(dane);
+		}
+		else if (dane=="past_motion")
+		{
+			getline(plik,dane);
+			parameters["past_motion"] = stoi(dane);
+		}
+		else if (dane=="area")
+		{
+			getline(plik,dane);
+			parameters["area"] = atof(dane.c_str());
+		}
+		else if (dane=="history")
+		{
+			getline(plik,dane);
+			parameters["history"] = stoi(dane);
+		}
+		else if (dane=="nmixtures")
+		{
+			getline(plik,dane);
+			parameters["nmixtures"] = stoi(dane);
+		}
+		else if (dane=="method")
+		{
+			getline(plik,dane);
+			parameters["method"] = stoi(dane);
+		}
+		else if (dane=="data_storage")
+		{
+			getline(plik,dane);
+			parameters["data_storage"] = stoi(dane);
+		}
+	}
+}
+
 void readParam(std::string path, int &data_storage)
 {
 	std::fstream plik;
@@ -937,5 +995,52 @@ void readParam(std::string path, int &data_storage)
 			getline(plik,dane);
 			data_storage = stoi(dane);
 		}
+	}
+}
+
+void userMenu(std::map<std::string,double> &parameters)
+{
+	char c;
+	std::cout << "Wcisnij 1 by uzyc domyslnych parametrow, 2 by wprowadzic parametry lub 3 by wczytac parametry z pliku" << std::endl;
+	std::cin >> c;
+	if (c=='1')
+		return;
+	else if (c=='2')
+	{
+		std::cout << "Podaj ilosc ramek do pomieniacia " << std::endl;
+		std::cin >> parameters["frame_skip"];
+
+		std::cout << "Podaj dlugosc przerwy miedzy miedzy wykrytymi fragmentami z ruchem " << std::endl;
+		std::cin >> parameters["zeros_size"];
+
+		std::cout << "Podaj dlugosc fragmentu z ruchem " << std::endl;
+		std::cin >> parameters["ones_size"];
+
+		std::cout << "Podaj o ile wyprzedzic nagrywanie fragmentu z wykrytem ruchem " << std::endl;
+		std::cin >> parameters["befo_motion"];
+
+		std::cout << "Podaj o ile wydluzyc nagrywanie fragmentu z wykrytym ruchem " << std::endl;
+		std::cin >> parameters["past_motion"];
+
+		std::cout << "Podaj minimalne pole obiektu do zakwalifikowania go jako obiekt ruchomy " << std::endl;
+		std::cin >> parameters["area"];
+
+		std::cout << "Podaj dlugosc historii " << std::endl;
+		std::cin >> parameters["history"];
+
+		std::cout << "Podaj ilosc mieszanin " << std::endl;
+		std::cin >> parameters["nmixtures"];
+
+		std::cout << "Podaj metode detekecji ruchu " << std::endl;
+		std::cin >> parameters["method"];
+
+		std::cout << "Podaj rodzaj przechowywania danych tymczasowych (0-RAM, 1-dysk)" << std::endl;
+		std::cin >> parameters["data_storage"];
+
+	}
+	else if (c=='3')
+	{
+		std::string path2 = "param.txt";
+		readParam(path2, parameters);
 	}
 }
