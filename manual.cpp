@@ -27,7 +27,7 @@ void moveFiveFramesLater(int &curFrame, std::deque<std::vector<uchar>> allFrames
 void stopVideo(bool &esc);
 void exitFromManualMode(bool &stop);
 void setMovieTime(std::deque<int> motion, std::deque<std::vector<uchar>> allFrames, double &momentFilmu, int &curFrame, int data_storage);
-void playVideo(std::deque<int> motion, std::deque<std::vector<uchar>> allFrames, bool &stop, bool &esc, int &curFrame, double &momentFilmu, char &k, int mSec, int data_storage);
+void playVideo(std::deque<int> motion, std::deque<std::vector<uchar>> allFrames, bool &stop, bool &esc, int &curFrame, double &momentFilmu, int &k, int mSec, int data_storage);
 void setBegining(int &begin, int curFrame);
 void setEnd(int &end, int curFrame);
 void moveToBegining(int &curFrame, int begin, std::deque<std::vector<uchar>> allFrames, int data_storage);
@@ -38,6 +38,10 @@ void saveVideoToFile(cv::VideoWriter video, std::vector<movieFragment> fragmentL
 void setBeginFromFrameNo(int &begin, int frameNo, std::deque<int> motion);
 void setEndFromFrameNo(int &end, int frameNo, std::deque<int> motion);
 //void manualMode(std::deque<std::vector<uchar>> allFrames, std::deque<int> motion, cv::VideoCapture &movie, int width, int height, int data_storage, int counter);
+void savePicture(cv::Mat frame, int data_storage, int &counter, std::string &pic_name, std::deque<std::vector<uchar>> &allFrames, std::vector<uchar> &buff, std::vector<int> param);
+void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_size, int &befo_motion, int &past_motion,
+				float &area, int &history, int &nmixtures, int &method, int &data_storage);
+void readParam(std::string path, int &data_storage);
 
 
 void motion_detection(std::string path, std::map<std::string,double> parameters, std::deque<std::vector<uchar>> &allFrames, std::deque<int> &motion, cv::VideoCapture &movie, int &width, int &height, int &counter){
@@ -52,24 +56,22 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
     int history = parameters["history"];
     int nmixtures = parameters["nmixtures"];
     int method = parameters["method"];
-    int thread = parameters["thread"];
 	int data_storage = parameters["data_storage"];
  
+
+	std::string path2 = "C://Users//Mirek//Desktop//Test//param.txt";
+	readParam(path2, frame_skip, zeros_size, ones_size, befo_motion, past_motion, requested_area, history, nmixtures, method, data_storage);
+
     cv::Mat frame;
 	cv::Mat fore;
-    //cv::VideoCapture movie;
     cv::Mat element = cv::getStructuringElement(0, cv::Size(5,5));
 	cv::BackgroundSubtractorMOG2 bg;
 
 	//zmienne do zapisywania na dysk
-	//int counter = 0;
 	std::string pic_name;
 	cv::Mat src;
 
-	//motion_detection(path,parametry, allFrames, motion, movie, width, height, data_storage, counter);
-
 	// zmienne do przechowywania w RAMie
-	//std::deque<std::vector<uchar>> allFrames;
 	std::vector<uchar> buff; 
 	std::vector<int> param = std::vector<int>(2);
     param[0] = CV_IMWRITE_JPEG_QUALITY;
@@ -104,37 +106,19 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
     int flag = 0;
     int perimeter = 100;
  
-    // główny wektor ruchu
-    //std::deque<int> motion;
-	
     // tworzenie kontekstu dla filtracji medianowej
     for(int i=0; i<offset; i++){
             motion.push_back(0);
     }
  
-    //cv::namedWindow("Motion");
     if( method == 1 ){ // metoda mieszanin gaussowskich
             // pętla odczytująca i przetwarzająca kolejne ramki
             while( true ){
                     if(!movie.read(frame)){
                             break;
                     }
-					
-					if (data_storage == 1)
-					{
-						pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-						if (!imwrite(pic_name,frame))
-						{
-							std::cout << "Nie udalo sie" << std::endl;
-							system("pause");
-						}
-						counter++;
-					}
-					else
-					{
-						imencode(".jpg",frame,buff,param);
-						allFrames.push_back(buff);
-					}
+					savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
                     // funkcja wyznaczjąca model tła
                     bg.operator()(frame,fore);
                     // eliminacja drobnych zakłóceń
@@ -172,17 +156,7 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 							break;
 						}
 						motion.push_back(flag);
-						if (data_storage == 1)
-						{
-							pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-							imwrite(pic_name,frame);
-							counter++;
-						}
-						else
-						{
-							imencode(".jpg",frame,buff,param);
-							allFrames.push_back(buff);
-						}
+						savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
                     }
             }
     } 
@@ -198,17 +172,8 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
         // odczyt pierwszych 3 ramek z pominięciem zadanej ilości pomiędzy (celem przyspieszenia obliczeń kosztem precyzji)
         movie >> frame_2;
 		motion.push_back(1);
-		if (data_storage == 1)
-		{
-			pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-			imwrite(pic_name,frame_2);
-			counter++;
-		}
-		else
-		{
-			imencode(".jpg",frame_2,buff,param);
-			allFrames.push_back(buff);
-		}
+		savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+		
         for(int i=0; i<frame_skip; i++)
 		{
             if(!movie.read(frame))
@@ -216,31 +181,13 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 				break;
             }
 			motion.push_back(1);
-			if (data_storage == 1)
-			{
-				pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg");
-				imwrite(pic_name,frame);
-				counter++;
-			}
-			else
-			{
-				imencode(".jpg",frame,buff,param);
-				allFrames.push_back(buff);
-			}
-        }
+			savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
+	    }
         movie >> frame_1;
 		motion.push_back(1);
-		if (data_storage == 1)
-		{
-			pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg");
-			imwrite(pic_name,frame_1);
-			counter++;
-		}
-		else
-		{
-			imencode(".jpg",frame_1,buff,param);
-			allFrames.push_back(buff);
-		}
+		savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
         for(int i=0; i<frame_skip; i++)
 		{
             if(!movie.read(frame))
@@ -248,31 +195,12 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 				break;
             }
 			motion.push_back(1);
-			if (data_storage == 1)
-			{
-				pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-				imwrite(pic_name,frame);
-				counter++;
-			}
-			else
-			{
-				imencode(".jpg",frame,buff,param);
-				allFrames.push_back(buff);
-			}
+			savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
         }
         movie >> frame_0;
 		motion.push_back(1);
-		if (data_storage == 1)
-		{
-			pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-			imwrite(pic_name,frame_0);
-			counter++;
-		}
-		else
-		{
-			imencode(".jpg",frame_0,buff,param);
-			allFrames.push_back(buff);
-		}
+		savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
         for(int i=0; i<frame_skip; i++)
 		{
 			if(!movie.read(frame))
@@ -280,17 +208,8 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 				break;
 			}
 			motion.push_back(1);
-			if (data_storage == 1)
-			{
-				pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-				imwrite(pic_name,frame);
-				counter++;
-			}
-			else
-			{
-				imencode(".jpg",frame,buff,param);
-				allFrames.push_back(buff);
-			}
+			savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
         }
                
         // kompresja do przestrzeni szarości
@@ -319,17 +238,8 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
             if(!movie.read(frame_0)){
                     break;
             }
-			if (data_storage == 1)
-			{
-				pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-				imwrite(pic_name,frame_0);
-				counter++;
-			}
-			else
-			{
-				imencode(".jpg",frame_0,buff,param);
-				allFrames.push_back(buff);
-			}
+			savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
+
             cvtColor(frame_0, frame_0, CV_BGR2GRAY);
             //opcjonalne wyświetlanie
             //cv::imshow("Motion",frame);
@@ -359,17 +269,7 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 					break;
                 }
                 motion.push_back(flag);
-				if (data_storage == 1)
-				{
-					pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
-					imwrite(pic_name,frame);
-					counter++;
-				}
-				else
-				{
-					imencode(".jpg",frame,buff,param);
-					allFrames.push_back(buff);
-				}
+				savePicture(frame, data_storage, counter, pic_name, allFrames, buff, param);
             }
         }
     }
@@ -381,14 +281,8 @@ void motion_detection(std::string path, std::map<std::string,double> parameters,
 		motion.push_back(0);
 	}
 
-
 	motion_processing(motion,offset,befo_motion,past_motion,ones_size,zeros_size);
 
-	// TRYB MANUALNY
-	//cv::namedWindow("Motion");
-	//manualMode(allFrames, motion, movie, width, height, data_storage, counter);
-
-	//cv::destroyWindow("Motion");
 }
  
 int main(int argc, char *argv[])
@@ -403,19 +297,19 @@ int main(int argc, char *argv[])
     parametry["history"] = 100;
     parametry["nmixtures"] = 3;
     parametry["method"] = 1;
-    parametry["thread"] = 1;
-	parametry["data_storage"] = 1;
+	parametry["data_storage"] = 0;
 
 	std::deque<std::vector<uchar>> allFrames;
 	std::deque<int> motion;
 	cv::VideoCapture movie;
 	int width;
 	int height;
-	int data_storage = parametry["data_storage"];
+	int data_storage;
+	std::string path2 = "C://Users//Mirek//Desktop//Test//param.txt";
+	readParam(path2, data_storage);
 	int counter = 0;
  
-    std::string path = "C://Users//Mirek//Desktop//Test//MOV_0013.mp4";
- 
+    std::string path = "C://Users//Mirek//Desktop//Test//ryba.mp4";
 	std::string dst = "C://Users//Mirek//Desktop//Algo";
 	chdir(dst.c_str());
 
@@ -490,7 +384,8 @@ int main(int argc, char *argv[])
 		fps = fps/2;
 	}
 
-	char k;
+	//char k;
+	int k;
 	int mSec = (int)(1000/fps);
 	int curFragment = 0;
 	int curFrame = fragmentList[0].begin;
@@ -502,10 +397,10 @@ int main(int argc, char *argv[])
 	// Menu w postaci "getchara" -> docelowo będa to buttony, suwaczek, i text fieldy w GUI
 	std::string menuMessage;
 	menuMessage = "p - Odtwarzaj \n"
-				  "v - 5 ramek do tylu \n"
-				  "b - 1 ramka do tylu \n"
-				  "n - 1 ramka do przodu \n"
-				  "m - 5 ramek do przodu \n"
+				  "Strzalka w dol - 5 ramek do tylu \n"
+				  "Strzalka w gore - 1 ramka do tylu \n"
+				  "Strzalka w prawo - 1 ramka do przodu \n"
+				  "Strzalka w lewo - 5 ramek do przodu \n"
 				  "x - ustaw relatywny moment filmu, 0 - poczatek, 1 koniec \n"
 				  "w - zapisz jako poczatek fragmentu \n"
 				  "e - zapisz jako koniec fragmentu \n"
@@ -530,36 +425,12 @@ int main(int argc, char *argv[])
 		
 
 		k = cv::waitKey(10000);
-		
+		//std::cout << (int)k;
+		//k = cv::waitKey(1000);
 		if (k=='p') // odtwarzanie - button "odtwarzaj"
 		{
 			playVideo(motion, allFrames, stop, esc, curFrame, momentFilmu, k, mSec, data_storage);
 		}
-		
-		////
-		else if (k=='b') // -1 ramka, button "-1 ramka"
-		{
-			moveOneFrameEarlier(curFrame, allFrames, data_storage);
-		}
-		
-		
-		else if (k=='v') // -5 ramek, button "-5 ramek"
-		{
-			moveFiveFramesEarlier(curFrame, allFrames, data_storage);
-		}
-		
-		
-		else if (k=='n') // + 1 ramka, button "+1 ramka"
-		{
-			moveOneFrameLater(curFrame, allFrames, motion, data_storage);
-		}
-		
-		
-		else if (k=='m') // + 5 ramek, button "+5 ramek"
-		{
-			moveFiveFramesLater(curFrame, allFrames, motion, data_storage);
-		}
-		
 		
 		else if (k=='w') // ustaw aktualną ramkę jako początek fragmentu, button "Ustaw początek"
 		{
@@ -621,9 +492,29 @@ int main(int argc, char *argv[])
 			setEndFromFrameNo(end, frameNo, motion);
 		}
 
-		else if ((int)k==27) //ESC - wyjście, button "Zakończ"
+		else if (k==27) //ESC - wyjście, button "Zakończ"
 		{
 			exitFromManualMode(esc);
+		}
+
+		else if (k==2490368) // up
+		{
+			moveFiveFramesLater(curFrame, allFrames, motion, data_storage);
+		}
+		
+		else if (k==2621440) // down
+		{
+			moveFiveFramesEarlier(curFrame, allFrames, data_storage);
+		}
+
+		else if (k==2424832) // left
+		{
+			moveOneFrameEarlier(curFrame, allFrames, data_storage);
+		}
+
+		else if (k==2555904) // right
+		{
+			moveOneFrameLater(curFrame, allFrames, motion, data_storage);
 		}
 
 		if (esc == true)
@@ -781,7 +672,7 @@ void setMovieTime(std::deque<int> motion, std::deque<std::vector<uchar>> allFram
 	cv::imshow("Motion",picToShow);
 }
 
-void playVideo(std::deque<int> motion, std::deque<std::vector<uchar>> allFrames, bool &stop, bool &esc, int &curFrame, double &momentFilmu, char &k, int mSec, int data_storage)
+void playVideo(std::deque<int> motion, std::deque<std::vector<uchar>> allFrames, bool &stop, bool &esc, int &curFrame, double &momentFilmu, int &k, int mSec, int data_storage)
 {
 	cv::Mat picToShow;
 	for (int i=curFrame; i<motion.size(); i++)
@@ -922,7 +813,9 @@ void saveVideoToFile(cv::VideoWriter video, std::vector<movieFragment> fragmentL
 		end = fragmentList[curFragment].end;
 		curFrame = begin;
 	}
-	std::cout << fragmentList[curFragment].name << std::endl;
+	std::cout << "Zapisano film " << std::endl;
+	char k = cv::waitKey(1000);
+	//std::cout << fragmentList[curFragment].name << std::endl;
 	if (data_storage == 1)
 		chdir("images");
 }
@@ -947,3 +840,103 @@ void setEndFromFrameNo(int &end, int frameNo, std::deque<int> motion)
 {
 	
 }*/
+
+void savePicture(cv::Mat frame, int data_storage, int &counter, std::string &pic_name, std::deque<std::vector<uchar>> &allFrames, std::vector<uchar> &buff, std::vector<int> param)
+{
+	if (data_storage == 1)
+	{
+		pic_name = std::string("img") + std::to_string((long double)counter) + std::string(".jpg"); 
+		imwrite(pic_name,frame);
+		counter++;
+	}
+	else
+	{
+		imencode(".jpg",frame,buff,param);
+		allFrames.push_back(buff);
+	}
+}
+
+
+void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_size, int &befo_motion, int &past_motion,
+				float &area, int &history, int &nmixtures, int &method, int &data_storage)
+{
+	std::fstream plik;
+	plik.open( path, std::ios::in );
+	if (!plik.good() == true)
+	{
+		return;
+	}
+	std::string dane;
+	while (getline(plik,dane))
+	{
+		if (dane=="frame_skip")
+		{
+			getline(plik,dane);
+			frame_skip = stoi(dane);
+		}
+		else if (dane=="zeros_size")
+		{
+			getline(plik,dane);
+			zeros_size = stoi(dane);
+		}
+		else if (dane=="ones_size")
+		{
+			getline(plik,dane);
+			ones_size = stoi(dane);
+		}
+		else if (dane=="befo_motion")
+		{
+			getline(plik,dane);
+			befo_motion = stoi(dane);
+		}
+		else if (dane=="past_motion")
+		{
+			getline(plik,dane);
+			past_motion = stoi(dane);
+		}
+		else if (dane=="area")
+		{
+			getline(plik,dane);
+			zeros_size = atof(dane.c_str());
+		}
+		else if (dane=="history")
+		{
+			getline(plik,dane);
+			history = stoi(dane);
+		}
+		else if (dane=="nmixtures")
+		{
+			getline(plik,dane);
+			nmixtures = stoi(dane);
+		}
+		else if (dane=="method")
+		{
+			getline(plik,dane);
+			method = stoi(dane);
+		}
+		else if (dane=="data_storage")
+		{
+			getline(plik,dane);
+			data_storage = stoi(dane);
+		}
+	}
+}
+
+void readParam(std::string path, int &data_storage)
+{
+	std::fstream plik;
+	plik.open( path, std::ios::in );
+	if (!plik.good() == true)
+	{
+		return;
+	}
+	std::string dane;
+	while (getline(plik,dane))
+	{
+		if (dane=="data_storage")
+		{
+			getline(plik,dane);
+			data_storage = stoi(dane);
+		}
+	}
+}
