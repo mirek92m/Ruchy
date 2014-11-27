@@ -856,7 +856,6 @@ void savePicture(cv::Mat frame, int data_storage, int &counter, std::string &pic
 	}
 }
 
-
 void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_size, int &befo_motion, int &past_motion,
 				float &area, int &history, int &nmixtures, int &method, int &data_storage)
 {
@@ -897,7 +896,7 @@ void readParam(std::string path, int &frame_skip, int &zeros_size, int &ones_siz
 		else if (dane=="area")
 		{
 			getline(plik,dane);
-			zeros_size = atof(dane.c_str());
+			area = atof(dane.c_str());
 		}
 		else if (dane=="history")
 		{
